@@ -19,6 +19,23 @@ Your Laptop                              Domino Data Lab
 
 Claude Code talks to a Domino-hosted MCP server over HTTP. The skill handles OAuth2 authentication (via Keycloak) and automatically injects a Bearer token into every request. You authenticate once — the offline refresh token keeps you logged in indefinitely.
 
+## Prerequisites — Deploy the Domino MCP Server
+
+Before using this skill, a Domino admin (or any user with project-publish permissions) must deploy the **[Domino Remote MCP Server](https://github.com/etanlightstone/domino-remote-mcp-proj)** as a Domino App. This is the server that Claude Code connects to.
+
+### Deployment steps
+
+1. **Create a Domino project** (or use an existing one) and add the files from [etanlightstone/domino-remote-mcp-proj](https://github.com/etanlightstone/domino-remote-mcp-proj).
+2. **Publish the project as a Domino App** with the app script set to `app.sh`.
+3. **Enable "Identity Propagation"** (also called "pass-through authentication") on the app. This allows the app to act on behalf of each connecting user rather than the app owner — so Domino jobs, file operations, and project access all respect individual user permissions and audit trails.
+4. **Grant access** to all Domino users who will be using this agent skill. In the app settings, add each user (or group) so they are authorized to access the app.
+5. **Note the app URL** — it will look like:
+   ```
+   https://<your-domino>/apps/<app-id>/mcp
+   ```
+
+> **Important:** Each user connecting for the first time must visit the app's base URL (without `/mcp`) in their browser and accept the identity propagation consent prompt. This is a one-time step per user per app. The authentication skill will remind users to do this.
+
 ## Quick Start
 
 ### 1. Install into your project directory
@@ -31,10 +48,8 @@ bash <(curl -sL https://raw.githubusercontent.com/etanlightstone/domino_remote_m
 
 The script will:
 - Download `.claude/`, `CLAUDE.md`, `.gitignore`, and `.mcp.json` into your directory
-- Prompt you for your **Domino MCP Server URL** (the published app URL)
+- Prompt you for your **Domino MCP Server URL** (the published app URL from the prerequisite step above)
 - Write a configured `.mcp.json` with your URL
-
-> **Don't have an MCP server URL yet?** Ask your Domino admin to publish the Domino MCP Server as an App in a Domino project. The URL looks like: `https://<your-domino>/apps/<app-id>/mcp`
 
 ### 2. Authenticate
 
@@ -154,8 +169,8 @@ Once connected, Claude Code follows these behaviors (defined in `CLAUDE.md`):
 
 - **Claude Code** (CLI, Desktop, or IDE extension)
 - **Python 3.7+** (for the OAuth and headers scripts — no pip dependencies)
-- **A Domino MCP Server** published as an App in your Domino instance
-- A browser for the one-time OAuth login
+- **A [Domino Remote MCP Server](https://github.com/etanlightstone/domino-remote-mcp-proj)** published as a Domino App with **identity propagation enabled** and access granted to your users (see [Prerequisites](#prerequisites--deploy-the-domino-mcp-server) above)
+- A browser for the one-time OAuth login and the one-time identity propagation consent
 
 ## License
 
