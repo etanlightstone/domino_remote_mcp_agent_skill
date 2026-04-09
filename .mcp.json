@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "domino-mcp": {
+      "type": "http",
+      "url": "https://apps.cloud-dogfood.domino.tech/apps/adfa68c5-f233-4b15-97cd-665701e0c2cb/mcp",
+      "headersHelper": "python3 .claude/skills/domino-auth/scripts/domino_headers.py"
+    }
+  }
+}

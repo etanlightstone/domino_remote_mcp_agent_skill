@@ -1,0 +1,12 @@
+# Domino MCP tokens (stored in ~/.domino-mcp/, not here, but just in case)
+tokens.json
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
