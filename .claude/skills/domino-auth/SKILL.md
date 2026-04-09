@@ -62,6 +62,29 @@ The MCP server uses **Streamable HTTP** transport (not SSE), so `type` must be `
 
 After adding, tell the user: **Restart your Claude Code session** for the MCP server to connect.
 
+## Step 4b — First-time pass-through authentication warning
+
+Before the user restarts, check whether they may need to authorize the Domino app proxy. Extract the MCP server URL from the project `.mcp.json` (look under `mcpServers.*.url` for any entry whose URL contains `/mcp`). Strip the trailing `/mcp` to get the base app URL.
+
+For example, if `.mcp.json` contains:
+```
+"url": "https://apps.cloud-dogfood.domino.tech/apps/adfa68c5-f233-4b15-97cd-665701e0c2cb/mcp"
+```
+then the base app URL is:
+```
+https://apps.cloud-dogfood.domino.tech/apps/adfa68c5-f233-4b15-97cd-665701e0c2cb
+```
+
+**Tell the user:**
+
+> ⚠️ **First-time setup required:** If this is your first time connecting to this MCP server, you must visit the app URL below in your browser **before** restarting the session:
+>
+> `<base app URL>`
+>
+> Domino will show a "pass-through authentication" prompt — click to accept it. This authorizes the app to act on your behalf. You only need to do this once per app.
+
+If the user confirms they've already done this (or it's not their first time), they can skip straight to restarting.
+
 ## Step 5 — Verify (after restart)
 
 After restart, the Domino MCP tools should appear. If issues occur:
