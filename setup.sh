@@ -208,7 +208,8 @@ if [ -n "$APP_BASE_URL" ]; then
     echo
     printf "  Have you already accepted the pass-through auth prompt? [y/N]: "
     read -r PASSTHROUGH_DONE
-    if [ "${PASSTHROUGH_DONE,,}" != "y" ] && [ "${PASSTHROUGH_DONE,,}" != "yes" ]; then
+    PASSTHROUGH_DONE="$(echo "$PASSTHROUGH_DONE" | tr '[:upper:]' '[:lower:]')"
+    if [ "$PASSTHROUGH_DONE" != "y" ] && [ "$PASSTHROUGH_DONE" != "yes" ]; then
         info "Opening the app URL in your browser..."
         if [ "$(uname)" = "Darwin" ]; then
             open "$APP_BASE_URL" 2>/dev/null || true
