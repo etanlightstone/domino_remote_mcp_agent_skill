@@ -208,7 +208,7 @@ MCPEOF
 {
   "mcpServers": {
     "domino-mcp": {
-      "type": "streamable-http",
+      "type": "http",
       "url": "${MCP_URL}",
       "headers": {
         "X-Domino-Api-Key": "${API_KEY}"
@@ -226,6 +226,7 @@ MCPEOF
 {
   "mcpServers": {
     "domino-mcp": {
+      "type": "streamableHttp",
       "url": "${MCP_URL}",
       "headers": {
         "X-Domino-Api-Key": "${API_KEY}"
@@ -242,9 +243,7 @@ MCPEOF
         cat > .codex/config.toml <<TOMLEOF
 [mcp_servers.domino-mcp]
 url = "${MCP_URL}"
-
-[mcp_servers.domino-mcp.headers]
-X-Domino-Api-Key = "${API_KEY}"
+http_headers = { "X-Domino-Api-Key" = "${API_KEY}" }
 TOMLEOF
         ok "Wrote .codex/config.toml (Codex — API Key)"
     }
