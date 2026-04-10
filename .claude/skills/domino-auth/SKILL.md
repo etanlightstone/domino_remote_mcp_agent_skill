@@ -8,16 +8,16 @@ argument-hint: [domino-instance-url]
 
 # Domino Data Lab Authentication & MCP Connection
 
-Authenticate the user to a Domino Data Lab instance via Keycloak OAuth2 (Authorization Code + PKCE) and configure a remote MCP server connection.
+Authenticate the user to a Domino Data Lab instance via Keycloak OAuth2 (Authorization Code + PKCE) and configure a remote MCP server connection using a local STDIO bridge.
 
 ## Overview
 
-Domino uses Keycloak (realm `DominoRealm`, client `domino-connect-client`). The OAuth flow opens a browser for login, captures the callback on a dynamic localhost port, and stores tokens at `~/.domino-mcp/tokens.json`. A headersHelper script injects the Bearer token into MCP requests and auto-refreshes it. With `offline_access` scope, the refresh token never expires — user authenticates once.
+Domino uses Keycloak (realm `DominoRealm`, client `domino-connect-client`). The OAuth flow opens a browser for login, captures the callback on a dynamic localhost port, and stores tokens at `~/.domino-mcp/tokens.json`. A local STDIO bridge (`domino_mcp_bridge.py`) runs as a child process — it reads JSON-RPC from stdin, injects a fresh Bearer token into every HTTP request to the remote Domino MCP server, and writes responses to stdout. This works indefinitely because tokens are refreshed per-request (not cached once per session). With `offline_access` scope, the refresh token never expires — user authenticates once.
 
 ## Step 1 — Determine the Domino URL
 
 If the user provided a URL argument (`$ARGUMENTS`), use it.
-Otherwise, ask for their Domino instance URL (e.g. `https://cloud-dogfood.domino.tech`).
+Otherwise, ask for their Domino instance URL (e.g. `https://your-domino.example.com`).
 
 ## Step 2 — Check existing auth status
 
@@ -27,8 +27,9 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/domino_oauth.py" check
 
 Parse the JSON output:
 - `authenticated: true` + `access_expired: false` → already logged in, skip to Step 4.
-- `authenticated: true` + `access_expired: true` + `offline_token: true` → the headersHelper will auto-refresh. Tell the user they're fine.
-- `authenticated: true` + `refresh_expired: true` + `offline_token: false` → re-login needed (Step 3).
+- `authenticated: true` + `access_expired: true` + `offline_token: true` → the bridge will auto-refresh. Tell the user they're fine.
+- `authenticated: true` + `access_expired: true` + `has_refresh_token: true` → the bridge will auto-refresh. Tell the user they're fine.
+- `authenticated: true` + `refresh_expired: true` + `offline_token: false` + `has_refresh_token: false` → re-login needed (Step 3).
 - `authenticated: false` → proceed to Step 3.
 
 ## Step 3 — Run the OAuth login
@@ -49,35 +50,48 @@ The `offline_access` scope gives a long-lived refresh token — the user only ne
 
 ## Step 4 — Configure the MCP server
 
-Ask the user for the MCP server URL if not already known. For the test server:
-`https://apps.cloud-dogfood.domino.tech/apps/403c7f11-77da-41a5-bb16-a638488c9eef/mcp`
+Ask the user for the MCP server URL if not already known. It looks like:
+`https://apps.<domino-host>/apps/<app-id>/mcp`
 
-The project `.mcp.json` may already have this configured. If not, add it:
+Check the project `.mcp.json` — it may already have a `domino-mcp` entry configured. If not (or if the URL needs updating), write it:
 
 ```bash
-claude mcp add-json domino-mcp '{"type":"http","url":"<MCP_SERVER_URL>","headersHelper":"python3 '"${CLAUDE_SKILL_DIR}"'/scripts/domino_headers.py"}'
+cat > .mcp.json <<'MCPEOF'
+{
+  "mcpServers": {
+    "domino-mcp": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        ".claude/skills/domino-auth/scripts/domino_mcp_bridge.py",
+        "<MCP_SERVER_URL>"
+      ]
+    }
+  }
+}
+MCPEOF
 ```
 
-The MCP server uses **Streamable HTTP** transport (not SSE), so `type` must be `"http"`.
+Replace `<MCP_SERVER_URL>` with the actual URL. The bridge handles authentication internally — no `headersHelper` needed.
 
-After adding, tell the user: **Restart your Claude Code session** for the MCP server to connect.
+After writing the config, tell the user: **Restart your Claude Code session** for the MCP server to connect.
 
 ## Step 4b — First-time pass-through authentication warning
 
-Before the user restarts, check whether they may need to authorize the Domino app proxy. Extract the MCP server URL from the project `.mcp.json` (look under `mcpServers.*.url` for any entry whose URL contains `/mcp`). Strip the trailing `/mcp` to get the base app URL.
+Before the user restarts, check whether they may need to authorize the Domino app proxy. Extract the MCP server URL from `.mcp.json` and strip the trailing `/mcp` to get the base app URL.
 
-For example, if `.mcp.json` contains:
+For example, if the URL is:
 ```
-"url": "https://apps.cloud-dogfood.domino.tech/apps/adfa68c5-f233-4b15-97cd-665701e0c2cb/mcp"
+https://apps.your-domino.example.com/apps/abc123-def456/mcp
 ```
 then the base app URL is:
 ```
-https://apps.cloud-dogfood.domino.tech/apps/adfa68c5-f233-4b15-97cd-665701e0c2cb
+https://apps.your-domino.example.com/apps/abc123-def456
 ```
 
 **Tell the user:**
 
-> ⚠️ **First-time setup required:** If this is your first time connecting to this MCP server, you must visit the app URL below in your browser **before** restarting the session:
+> **First-time setup required:** If this is your first time connecting to this MCP server, you must visit the app URL below in your browser **before** restarting the session:
 >
 > `<base app URL>`
 >
@@ -88,8 +102,8 @@ If the user confirms they've already done this (or it's not their first time), t
 ## Step 5 — Verify (after restart)
 
 After restart, the Domino MCP tools should appear. If issues occur:
-1. Check: `python3 "${CLAUDE_SKILL_DIR}/scripts/domino_oauth.py" check`
-2. Test headers: `python3 "${CLAUDE_SKILL_DIR}/scripts/domino_headers.py"`
+1. Check auth: `python3 "${CLAUDE_SKILL_DIR}/scripts/domino_oauth.py" check`
+2. Test token refresh: `python3 "${CLAUDE_SKILL_DIR}/scripts/domino_headers.py"` (should print JSON with an Authorization header)
 3. Re-login if needed: repeat Step 3
 
 ## Logout

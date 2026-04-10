@@ -1,8 +1,10 @@
 # Domino MCP tokens (stored in ~/.domino-mcp/, not here, but just in case)
 tokens.json
 
-# Claude Code local settings
+# IDE local settings (MCP configs are committed; user settings are not)
 .claude/settings.local.json
+.cursor/rules/
+.kiro/agents/
 
 # Python
 __pycache__/
