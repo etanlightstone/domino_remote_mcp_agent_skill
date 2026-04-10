@@ -38,7 +38,6 @@ err()   { printf "${red}[ERROR]${reset} %s\n" "$*" >&2; }
 # ── Pre-flight checks ──────────────────────────────────────────────────────
 command -v curl  >/dev/null 2>&1 || { err "curl is required but not found."; exit 1; }
 command -v tar   >/dev/null 2>&1 || { err "tar is required but not found.";  exit 1; }
-command -v python3 >/dev/null 2>&1 || { err "python3 is required but not found."; exit 1; }
 
 # ── Step 1: Which IDE? ────────────────────────────────────────────────────
 echo
@@ -68,6 +67,26 @@ case "$IDE_CHOICE" in
 esac
 echo
 
+# ── Step 1b: Which auth method? ──────────────────────────────────────────
+printf "${bold}Which authentication method?${reset}\n"
+echo
+echo "  1) OAuth (recommended) — Browser-based login, auto-refreshing tokens"
+echo "  2) API Key — Use a Domino API key from your account settings"
+echo
+printf "  Enter number [1-2]: "
+read -r AUTH_CHOICE
+
+case "$AUTH_CHOICE" in
+    1) AUTH_METHOD="oauth"  ;;
+    2) AUTH_METHOD="apikey" ;;
+    *) warn "Invalid choice, defaulting to OAuth."; AUTH_METHOD="oauth" ;;
+esac
+echo
+
+if [ "$AUTH_METHOD" = "oauth" ]; then
+    command -v python3 >/dev/null 2>&1 || { err "python3 is required for OAuth mode but not found."; exit 1; }
+fi
+
 # ── Step 2: Download and overlay files ────────────────────────────────────
 info "Downloading skill files from github.com/${REPO} ..."
 
@@ -89,10 +108,31 @@ MCP_URL="$(echo "$MCP_URL" | sed 's|[[:space:]]*$||; s|/*$||')"
 if [ -z "$MCP_URL" ]; then
     err "No URL provided. You can manually edit the MCP config files later."
     echo
-else
-    # ── Write MCP config(s) for the chosen IDE ──────────────────────────
+fi
 
-    write_claude_config() {
+# ── Step 3b: Prompt for API key (apikey mode only) ───────────────────────
+API_KEY=""
+if [ "$AUTH_METHOD" = "apikey" ] && [ -n "$MCP_URL" ]; then
+    MCP_HOST_FOR_HINT="$(echo "$MCP_URL" | sed -E 's|(https?://)apps\.|\1|; s|/apps/.*||')"
+    echo
+    printf "${bold}Enter your Domino API Key${reset}\n"
+    echo "(Generate one at: ${MCP_HOST_FOR_HINT}/account#apikey)"
+    echo
+    printf "  API Key: "
+    read -r API_KEY
+
+    if [ -z "$API_KEY" ]; then
+        err "No API key provided. You can manually edit the MCP config files later."
+    fi
+    echo
+fi
+
+# ── Step 4: Write MCP config(s) ──────────────────────────────────────────
+if [ -n "$MCP_URL" ]; then
+
+    # ── OAuth config writers (STDIO bridge) ──────────────────────────────
+
+    write_claude_config_oauth() {
         cat > .mcp.json <<MCPEOF
 {
   "mcpServers": {
@@ -107,10 +147,10 @@ else
   }
 }
 MCPEOF
-        ok "Wrote .mcp.json (Claude Code)"
+        ok "Wrote .mcp.json (Claude Code — OAuth bridge)"
     }
 
-    write_cursor_config() {
+    write_cursor_config_oauth() {
         mkdir -p .cursor
         cat > .cursor/mcp.json <<MCPEOF
 {
@@ -125,20 +165,20 @@ MCPEOF
   }
 }
 MCPEOF
-        ok "Wrote .cursor/mcp.json (Cursor)"
+        ok "Wrote .cursor/mcp.json (Cursor — OAuth bridge)"
     }
 
-    write_codex_config() {
+    write_codex_config_oauth() {
         mkdir -p .codex
         cat > .codex/config.toml <<TOMLEOF
 [mcp_servers.domino-mcp]
 command = "python3"
 args = ["${BRIDGE_SCRIPT}", "${MCP_URL}"]
 TOMLEOF
-        ok "Wrote .codex/config.toml (Codex)"
+        ok "Wrote .codex/config.toml (Codex — OAuth bridge)"
     }
 
-    write_kiro_config() {
+    write_kiro_config_oauth() {
         mkdir -p .kiro/settings
         cat > .kiro/settings/mcp.json <<MCPEOF
 {
@@ -153,41 +193,159 @@ TOMLEOF
   }
 }
 MCPEOF
-        ok "Wrote .kiro/settings/mcp.json (Kiro)"
+        ok "Wrote .kiro/settings/mcp.json (Kiro — OAuth bridge)"
     }
 
-    write_copilot_config() {
-        # Copilot CLI reads .mcp.json (same as Claude Code)
-        write_claude_config
+    write_copilot_config_oauth() {
+        write_claude_config_oauth
         ok "  (Copilot CLI also reads .mcp.json)"
     }
 
-    case "$IDE" in
-        claude)  write_claude_config ;;
-        cursor)  write_cursor_config ;;
-        codex)   write_codex_config ;;
-        kiro)    write_kiro_config ;;
-        copilot) write_copilot_config ;;
-        all)
-            write_claude_config
-            write_cursor_config
-            write_codex_config
-            write_kiro_config
-            ;;
-    esac
+    # ── API Key config writers (direct HTTP) ─────────────────────────────
+
+    write_claude_config_apikey() {
+        cat > .mcp.json <<MCPEOF
+{
+  "mcpServers": {
+    "domino-mcp": {
+      "type": "streamable-http",
+      "url": "${MCP_URL}",
+      "headers": {
+        "X-Domino-Api-Key": "${API_KEY}"
+      }
+    }
+  }
+}
+MCPEOF
+        ok "Wrote .mcp.json (Claude Code — API Key)"
+    }
+
+    write_cursor_config_apikey() {
+        mkdir -p .cursor
+        cat > .cursor/mcp.json <<MCPEOF
+{
+  "mcpServers": {
+    "domino-mcp": {
+      "url": "${MCP_URL}",
+      "headers": {
+        "X-Domino-Api-Key": "${API_KEY}"
+      }
+    }
+  }
+}
+MCPEOF
+        ok "Wrote .cursor/mcp.json (Cursor — API Key)"
+    }
+
+    write_codex_config_apikey() {
+        mkdir -p .codex
+        cat > .codex/config.toml <<TOMLEOF
+[mcp_servers.domino-mcp]
+url = "${MCP_URL}"
+
+[mcp_servers.domino-mcp.headers]
+X-Domino-Api-Key = "${API_KEY}"
+TOMLEOF
+        ok "Wrote .codex/config.toml (Codex — API Key)"
+    }
+
+    write_kiro_config_apikey() {
+        mkdir -p .kiro/settings
+        cat > .kiro/settings/mcp.json <<MCPEOF
+{
+  "mcpServers": {
+    "domino-mcp": {
+      "url": "${MCP_URL}",
+      "headers": {
+        "X-Domino-Api-Key": "${API_KEY}"
+      }
+    }
+  }
+}
+MCPEOF
+        ok "Wrote .kiro/settings/mcp.json (Kiro — API Key)"
+    }
+
+    write_copilot_config_apikey() {
+        write_claude_config_apikey
+        ok "  (Copilot CLI also reads .mcp.json)"
+    }
+
+    # ── Dispatch to the correct writer ───────────────────────────────────
+
+    if [ "$AUTH_METHOD" = "apikey" ]; then
+        case "$IDE" in
+            claude)  write_claude_config_apikey ;;
+            cursor)  write_cursor_config_apikey ;;
+            codex)   write_codex_config_apikey ;;
+            kiro)    write_kiro_config_apikey ;;
+            copilot) write_copilot_config_apikey ;;
+            all)
+                write_claude_config_apikey
+                write_cursor_config_apikey
+                write_codex_config_apikey
+                write_kiro_config_apikey
+                ;;
+        esac
+    else
+        case "$IDE" in
+            claude)  write_claude_config_oauth ;;
+            cursor)  write_cursor_config_oauth ;;
+            codex)   write_codex_config_oauth ;;
+            kiro)    write_kiro_config_oauth ;;
+            copilot) write_copilot_config_oauth ;;
+            all)
+                write_claude_config_oauth
+                write_cursor_config_oauth
+                write_codex_config_oauth
+                write_kiro_config_oauth
+                ;;
+        esac
+    fi
 
     echo
 fi
 
-# ── Step 4: Ensure CLAUDE.md is a copy of AGENTS.md ──────────────────────
-# AGENTS.md is the primary file (universal standard).
-# CLAUDE.md is a copy so Claude Code finds its preferred name.
-if [ -f AGENTS.md ]; then
-    cp AGENTS.md CLAUDE.md
-    ok "CLAUDE.md copied from AGENTS.md (Claude Code compatibility)"
+# ── Step 5: Place agent rules file for the chosen IDE ────────────────────
+# The repo contains two variants:
+#   AGENTS.md         — OAuth mode (references skill files, auth architecture)
+#   AGENTS_APIKEY.md  — API Key mode (simplified, no auth sections)
+#
+# Claude Code reads CLAUDE.md; all other agents read AGENTS.md.
+# We place exactly one file (or both for "all"), then clean up the unused variant.
+
+RULES_SOURCE="AGENTS.md"
+if [ "$AUTH_METHOD" = "apikey" ]; then
+    RULES_SOURCE="AGENTS_APIKEY.md"
 fi
 
-# ── Step 5: Extract the Domino host URL ──────────────────────────────────
+case "$IDE" in
+    claude|copilot)
+        mv "$RULES_SOURCE" CLAUDE.md
+        ok "Placed CLAUDE.md (Claude Code)"
+        ;;
+    cursor|codex|kiro)
+        if [ "$AUTH_METHOD" = "apikey" ]; then
+            mv AGENTS_APIKEY.md AGENTS.md
+        fi
+        ok "Placed AGENTS.md ($IDE)"
+        ;;
+    all)
+        if [ "$AUTH_METHOD" = "apikey" ]; then
+            mv AGENTS_APIKEY.md AGENTS.md
+        fi
+        cp AGENTS.md CLAUDE.md
+        ok "Placed AGENTS.md + CLAUDE.md (all agents)"
+        ;;
+esac
+
+# Clean up whichever variant wasn't used
+rm -f AGENTS_APIKEY.md 2>/dev/null || true
+if [ "$IDE" = "claude" ] || [ "$IDE" = "copilot" ]; then
+    rm -f AGENTS.md 2>/dev/null || true
+fi
+
+# ── Step 6: Extract the Domino host URL ──────────────────────────────────
 DOMINO_HOST=""
 APP_BASE_URL=""
 if [ -n "$MCP_URL" ]; then
@@ -196,7 +354,7 @@ if [ -n "$MCP_URL" ]; then
     APP_BASE_URL="$(echo "$MCP_URL" | sed -E 's|/mcp$||')"
 fi
 
-# ── Step 6: First-time pass-through auth ─────────────────────────────────
+# ── Step 7: First-time pass-through auth ─────────────────────────────────
 if [ -n "$APP_BASE_URL" ]; then
     echo
     printf "${yellow}[!]${reset}  ${bold}First-time setup:${reset} If this is your first time using this MCP server,\n"
@@ -222,8 +380,8 @@ if [ -n "$APP_BASE_URL" ]; then
     fi
 fi
 
-# ── Step 7: Authenticate to Domino ───────────────────────────────────────
-if [ -n "$DOMINO_HOST" ]; then
+# ── Step 8: OAuth login (oauth mode only) ────────────────────────────────
+if [ "$AUTH_METHOD" = "oauth" ] && [ -n "$DOMINO_HOST" ]; then
     echo
     printf "${bold}Authenticating to Domino...${reset}\n"
     echo
@@ -231,10 +389,49 @@ if [ -n "$DOMINO_HOST" ]; then
     echo
 fi
 
-# ── Step 8: Done ─────────────────────────────────────────────────────────
+# ── Step 9: API Key cleanup (apikey mode only) ───────────────────────────
+if [ "$AUTH_METHOD" = "apikey" ]; then
+    # Remove OAuth skill files — not needed for API key auth
+    if [ -d ".claude/skills" ]; then
+        rm -rf ".claude/skills"
+        ok "Removed .claude/skills/ (not needed for API Key auth)"
+    fi
+    # Remove empty .claude dir if nothing else is in it
+    if [ -d ".claude" ] && [ -z "$(ls -A .claude 2>/dev/null)" ]; then
+        rmdir .claude
+    fi
+
+    # Add MCP config files to .gitignore so the API key isn't committed
+    GITIGNORE_ADDITIONS=""
+    if ! grep -qxF '.mcp.json' .gitignore 2>/dev/null; then
+        GITIGNORE_ADDITIONS="${GITIGNORE_ADDITIONS}.mcp.json\n"
+    fi
+    if ! grep -qxF '.cursor/mcp.json' .gitignore 2>/dev/null; then
+        GITIGNORE_ADDITIONS="${GITIGNORE_ADDITIONS}.cursor/mcp.json\n"
+    fi
+    if ! grep -qxF '.codex/config.toml' .gitignore 2>/dev/null; then
+        GITIGNORE_ADDITIONS="${GITIGNORE_ADDITIONS}.codex/config.toml\n"
+    fi
+    if ! grep -qxF '.kiro/settings/mcp.json' .gitignore 2>/dev/null; then
+        GITIGNORE_ADDITIONS="${GITIGNORE_ADDITIONS}.kiro/settings/mcp.json\n"
+    fi
+    if [ -n "$GITIGNORE_ADDITIONS" ]; then
+        printf "\n# MCP configs containing API key (auto-added by setup.sh)\n" >> .gitignore
+        printf "$GITIGNORE_ADDITIONS" >> .gitignore
+        ok "Added MCP config files to .gitignore (protects API key)"
+    fi
+fi
+
+# ── Step 10: Done ────────────────────────────────────────────────────────
 echo "========================================"
 printf "${bold}Setup Complete!${reset}\n"
 echo "========================================"
+echo
+if [ "$AUTH_METHOD" = "apikey" ]; then
+    echo "  Auth: API Key (configured in MCP config files)"
+else
+    echo "  Auth: OAuth (browser-based, auto-refreshing tokens)"
+fi
 echo
 echo "  Open your IDE in this directory and start working:"
 echo

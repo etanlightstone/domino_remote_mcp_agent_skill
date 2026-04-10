@@ -1,30 +1,7 @@
-# Domino Data Lab project and how to use the skill and MCP Server
+# Domino Data Lab — Agent Rules
 
-This project provides an agent skill for authenticating to Domino Data Lab
-and connecting to remote MCP servers running inside Domino. This is so a user working on their remote laptop can sync files and interact with the Domino platform via the MCP Server.
-
-## Quick Start
-
-1. Run `/domino-auth <domino host URL>` — authenticates via browser, ask user for URL (Claude Code). For other IDEs, run: `python3 .claude/skills/domino-auth/scripts/domino_oauth.py login <domino-url>`
-2. Restart the IDE session — the Domino MCP tools will appear
-
-## Key Components
-
-- `.claude/skills/domino-auth/` — Skill for OAuth login + MCP server setup
-- `.claude/skills/domino-auth/scripts/domino_oauth.py` — OAuth2 Auth Code + PKCE flow
-- `.claude/skills/domino-auth/scripts/domino_mcp_bridge.py` — STDIO-to-HTTP bridge (fresh token on every request)
-- `.claude/skills/domino-auth/scripts/domino_headers.py` — Token refresh logic (used by the bridge internally)
-- `.mcp.json` — MCP server configuration (STDIO bridge)
-
-## Auth Architecture
-
-- Domino uses Keycloak (realm: `DominoRealm`, client: `domino-connect-client`)
-- Same client as the VS Code extension (allows localhost redirect URIs)
-- Uses Authorization Code + PKCE with dynamic port allocation
-- `offline_access` scope gives a long-lived refresh token (never expires by time)
-- A local STDIO bridge process injects a fresh Bearer token on every HTTP request
-- Tokens stored at `~/.domino-mcp/tokens.json` (not in this repo)
-- Bearer token works through Domino's nginx app proxy
+This project is connected to a Domino Data Lab MCP server using API Key authentication.
+The API key is configured in your IDE's MCP config file — no additional auth steps are needed.
 
 ## How to use Domino
 The MCP server can operate on any Domino project, not just the one it's hosted in. The target project (owner, name, DFS vs Git) is stored in `domino_project_settings.md` in the working directory — always read this before running jobs. If it doesn't exist, ask the user and create it.
