@@ -1,8 +1,41 @@
 # Domino Remote MCP Agent Skill
 
-Connect your AI coding agent to a [Domino Data Lab](https://www.dominodatalab.com/) MCP server — so you can write code locally and run jobs, manage data, and train models on Domino, all from your IDE.
+Connect your **local** coding agent to a Domino MCP server — write code on your laptop and run jobs, manage data, and train models on Domino, all from your IDE.
+
+> Already inside a Domino workspace? You don't need this — Domino workspaces come with MCP tools and agent skills built in.
 
 Works with: **Claude Code**, **Cursor**, **Codex**, **Kiro**, **GitHub Copilot**, and any MCP-capable IDE.
+
+## Quick Start
+
+### Prerequisite
+
+Your Domino deployment needs the **[Domino Remote MCP Server](https://github.com/etanlightstone/domino-remote-mcp-proj)** published as a Domino App with [identity propagation](https://docs.dominodatalab.com/en/latest/user_guide/e9de00/publish-apps-with-passthrough-authentication/) enabled and access granted to your users. You'll need the app URL (e.g. `https://apps.<your-domino>/apps/<app-id>/mcp`).
+
+### Install
+
+Run this **from inside your existing project directory** (the one whose git repo matches your Domino project):
+
+```bash
+bash <(curl -sL https://raw.githubusercontent.com/etanlightstone/domino_remote_mcp_agent_skill/main/setup.sh)
+```
+
+The script will:
+- Download the skill files, `AGENTS.md`, `.gitignore`, and MCP configs into your directory
+- Prompt you for your **Domino MCP Server URL** and which IDE you use
+- Walk you through **first-time identity propagation consent** (one-time browser step)
+- **Authenticate you to Domino** via browser-based OAuth (or API key)
+- Write MCP configs for your agent — then just open your IDE and go
+
+### Start working
+
+Open your IDE in the project directory. The Domino MCP tools will be available immediately. Try prompts like:
+
+> "There's a dataset in this project — run a simple analysis of the data, write a model architecture and a separate training script, then train two small models to compare in Domino."
+
+> "List all files in the project and show me what data is available."
+
+> "Run a job that profiles the dataset and generates summary statistics."
 
 ## How It Works
 
@@ -25,74 +58,6 @@ Your Laptop                              Domino Data Lab
 ```
 
 Your IDE spawns a lightweight STDIO bridge process that handles authentication internally. The bridge gets a fresh OAuth token for every HTTP request to Domino, so connections never expire. You authenticate once — the offline refresh token keeps you logged in indefinitely.
-
-## Prerequisites — Deploy the Domino MCP Server
-
-Before using this skill, a Domino admin (or any user with project-publish permissions) must deploy the **[Domino Remote MCP Server](https://github.com/etanlightstone/domino-remote-mcp-proj)** as a Domino App. This is the server that your IDE connects to.
-
-### Deployment steps
-
-1. **Create a Domino project** (or use an existing one) and add the files from [etanlightstone/domino-remote-mcp-proj](https://github.com/etanlightstone/domino-remote-mcp-proj).
-2. **Publish the project as a Domino App** with the app script set to `app.sh`.
-3. **Enable "Identity Propagation"** (also called "pass-through authentication") on the app. This allows the app to act on behalf of each connecting user rather than the app owner — so Domino jobs, file operations, and project access all respect individual user permissions and audit trails.
-4. **Grant access** to all Domino users who will be using this agent skill. In the app settings, add each user (or group) so they are authorized to access the app.
-5. **Note the app URL** — it will look like:
-   ```
-   https://apps.<your-domino>/apps/<app-id>/mcp
-   ```
-
-> **Important:** Each user connecting for the first time must visit the app's base URL (without `/mcp`) in their browser and accept the identity propagation consent prompt. This is a one-time step per user per app.
-
-## Quick Start
-
-### 1. Install into your project directory
-
-Run this **from inside your existing project directory** (the one whose git repo matches your Domino project). It overlays the skill files without touching your `.git`:
-
-```bash
-bash <(curl -sL https://raw.githubusercontent.com/etanlightstone/domino_remote_mcp_agent_skill/main/setup.sh)
-```
-
-The script will:
-- Download the skill files, `AGENTS.md`, `.gitignore`, and MCP configs into your directory
-- Prompt you for your **Domino MCP Server URL** (the published app URL from the prerequisite step)
-- Write MCP configs for **all supported agents** (Claude Code, Cursor, Codex, Kiro, Copilot)
-
-### 2. Authenticate
-
-**Claude Code** (built-in skill):
-
-```
-/domino-auth https://your-domino-instance.example.com
-```
-
-**Any IDE** (run in your terminal):
-
-```bash
-python3 .claude/skills/domino-auth/scripts/domino_oauth.py login https://your-domino-instance.example.com
-```
-
-This opens your browser for Domino login (Keycloak OAuth2 + PKCE). Tokens are saved to `~/.domino-mcp/tokens.json` — not in your project, so they're never committed.
-
-### 3. Restart your IDE
-
-The MCP server connection is established at session startup. After authenticating, restart your IDE session:
-
-- **Claude Code:** `/exit` then `claude`
-- **Cursor:** Cmd+Shift+P → "Reload Window"
-- **Codex / Kiro / Copilot:** Restart your session
-
-The Domino MCP tools will now be available.
-
-### 4. Start working
-
-Your IDE is now a Domino-aware agent. Try prompts like:
-
-> "There's a dataset in this project — run a simple analysis of the data, write a model architecture and a separate training script, then train two small models to compare in Domino."
-
-> "List all files in the project and show me what data is available."
-
-> "Run a job that profiles the dataset and generates summary statistics."
 
 ## What Gets Installed
 
@@ -221,7 +186,7 @@ Once connected, the AI agent follows these behaviors (defined in `AGENTS.md`):
 
 - **Python 3.7+** (for the OAuth and bridge scripts — no pip dependencies needed)
 - **An MCP-capable IDE**: Claude Code, Cursor, Codex, Kiro, GitHub Copilot, etc.
-- **A [Domino Remote MCP Server](https://github.com/etanlightstone/domino-remote-mcp-proj)** published as a Domino App with **identity propagation enabled** and access granted to your users (see [Prerequisites](#prerequisites--deploy-the-domino-mcp-server))
+- **A [Domino Remote MCP Server](https://github.com/etanlightstone/domino-remote-mcp-proj)** published as a Domino App with **identity propagation enabled** and access granted to your users (see [Prerequisite](#prerequisite))
 - A browser for the one-time OAuth login and the one-time identity propagation consent
 
 ## License
